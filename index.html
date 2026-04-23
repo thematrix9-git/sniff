@@ -168,8 +168,7 @@
 
   const audioFailed = new Audio('failed.m4a');
   const audioApproved1 = new Audio('approved 1.m4a');
-  const audioApproved2 = new Audio('approved 2.m4a');
-  [audioFailed, audioApproved1, audioApproved2].forEach(a => a.preload = 'auto');
+  [audioFailed, audioApproved1].forEach(a => a.preload = 'auto');
 
   // Shuffle queue (no repeats until exhausted)
   let queue = [];
@@ -216,7 +215,7 @@
     if (isPass) {
       splashText.textContent = 'PASS!';
       splashText.className = 'pass';
-      const approved = Math.random() < 0.5 ? audioApproved1 : audioApproved2;
+      const approved = audioApproved1;
       approved.currentTime = 0;
       approved.play().catch(()=>{});
     } else {
