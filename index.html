@@ -243,7 +243,7 @@
   function reset() {
     if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
     splash.classList.remove('show');
-    [audioFailed, audioApproved1, audioApproved2].forEach(a => { a.pause(); a.currentTime = 0; });
+    [audioFailed, audioApproved1].forEach(a => { a.pause(); a.currentTime = 0; });
     nextBtn.classList.remove('show');
     sniffBtn.disabled = false;
     busy = false;
