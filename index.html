@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Glasgow Sniff</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: #111;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+  #app {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    gap: 24px;
+  }
+  h1 {
+    font-size: 28px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  #footWrap {
+    width: min(420px, 90vw);
+    aspect-ratio: 1 / 1;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #222;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #footImg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: opacity 0.25s ease;
+  }
+  #sniffBtn {
+    background: linear-gradient(180deg, #ff3b3b, #c00);
+    color: #fff;
+    border: none;
+    padding: 20px 60px;
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(255,59,59,0.4);
+    transition: transform 0.1s ease, box-shadow 0.2s ease;
+  }
+  #sniffBtn:hover:not(:disabled) { transform: translateY(-2px); }
+  #sniffBtn:active:not(:disabled) { transform: translateY(1px); }
+  #sniffBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+  #nextBtn {
+    background: transparent;
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.3);
+    padding: 10px 24px;
+    border-radius: 999px;
+    font-size: 14px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    text-transform: uppercase;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  #nextBtn.show { opacity: 1; pointer-events: auto; }
+
+  #overlay {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  #overlay.show { display: flex; }
+  #overlayVideo {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+  }
+  #splash {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    pointer-events: none;
+    background: rgba(0,0,0,0.4);
+  }
+  #splash.show { display: flex; animation: pop 0.4s ease-out; }
+  #splashText {
+    font-size: clamp(80px, 20vw, 240px);
+    font-weight: 900;
+    letter-spacing: 6px;
+    text-shadow: 0 6px 30px rgba(0,0,0,0.8);
+    animation: shake 0.5s ease-in-out;
+  }
+  .pass { color: #2ecc71; }
+  .fail { color: #ff2b2b; }
+  @keyframes pop {
+    0% { transform: scale(0.5); opacity: 0; }
+    60% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0) rotate(0); }
+    20% { transform: translateX(-10px) rotate(-2deg); }
+    40% { transform: translateX(10px) rotate(2deg); }
+    60% { transform: translateX(-6px) rotate(-1deg); }
+    80% { transform: translateX(6px) rotate(1deg); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Glasgow Sniff</h1>
+  <div id="footWrap">
+    <img id="footImg" alt="foot" />
+  </div>
+  <button id="sniffBtn">SNIFF</button>
+  <button id="nextBtn">Next</button>
+</div>
+
+<div id="overlay">
+  <video id="overlayVideo" playsinline></video>
+</div>
+
+<div id="splash"><div id="splashText"></div></div>
+
+<script>
+  const FEET = [
+    "1.jpeg","11.jpg","12.jpeg","15.jpeg","2.webp",
+    "3.jpg","4.jpeg","5.jpeg","6.jpg","7.jpeg","8.jpg"
+  ];
+
+  const footImg = document.getElementById('footImg');
+  const sniffBtn = document.getElementById('sniffBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const overlay = document.getElementById('overlay');
+  const overlayVideo = document.getElementById('overlayVideo');
+  const splash = document.getElementById('splash');
+  const splashText = document.getElementById('splashText');
+
+  // Preload assets
+  const passVideo = new Audio(); // just to keep reference
+  const videoPass = document.createElement('video');
+  videoPass.src = 'sniff pass.mp4';
+  videoPass.preload = 'auto';
+  const videoFail = document.createElement('video');
+  videoFail.src = 'sniff fail.mp4';
+  videoFail.preload = 'auto';
+
+  const audioFailed = new Audio('failed.m4a');
+  const audioApproved1 = new Audio('approved 1.m4a');
+  const audioApproved2 = new Audio('approved 2.m4a');
+  [audioFailed, audioApproved1, audioApproved2].forEach(a => a.preload = 'auto');
+
+  // Shuffle queue (no repeats until exhausted)
+  let queue = [];
+  function reshuffle() {
+    queue = [...FEET];
+    for (let i = queue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [queue[i], queue[j]] = [queue[j], queue[i]];
+    }
+  }
+  function nextFoot() {
+    if (queue.length === 0) reshuffle();
+    const pick = queue.pop();
+    footImg.style.opacity = 0;
+    setTimeout(() => {
+      footImg.src = 'feet/' + encodeURIComponent(pick);
+      footImg.style.opacity = 1;
+    }, 150);
+  }
+
+  let busy = false;
+  let resetTimer = null;
+
+  function doSniff() {
+    if (busy) return;
+    busy = true;
+    sniffBtn.disabled = true;
+    nextBtn.classList.remove('show');
+
+    const isPass = Math.random() < 0.5;
+    overlayVideo.src = isPass ? 'sniff pass.mp4' : 'sniff fail.mp4';
+    overlay.classList.add('show');
+    overlayVideo.currentTime = 0;
+    const playPromise = overlayVideo.play();
+    if (playPromise) playPromise.catch(() => {});
+
+    overlayVideo.onended = () => {
+      overlay.classList.remove('show');
+      showResult(isPass);
+    };
+  }
+
+  function showResult(isPass) {
+    if (isPass) {
+      splashText.textContent = 'PASS!';
+      splashText.className = 'pass';
+      const approved = Math.random() < 0.5 ? audioApproved1 : audioApproved2;
+      approved.currentTime = 0;
+      approved.play().catch(()=>{});
+    } else {
+      splashText.textContent = 'FAIL';
+      splashText.className = 'fail';
+      audioFailed.currentTime = 0;
+      audioFailed.play().catch(()=>{});
+    }
+    splash.classList.add('show');
+    nextBtn.classList.add('show');
+
+    resetTimer = setTimeout(reset, 5000);
+  }
+
+  function reset() {
+    if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
+    splash.classList.remove('show');
+    [audioFailed, audioApproved1, audioApproved2].forEach(a => { a.pause(); a.currentTime = 0; });
+    nextBtn.classList.remove('show');
+    sniffBtn.disabled = false;
+    busy = false;
+    nextFoot();
+  }
+
+  sniffBtn.addEventListener('click', doSniff);
+  nextBtn.addEventListener('click', reset);
+
+  // initial load
+  nextFoot();
+</script>
+</body>
+</html>
