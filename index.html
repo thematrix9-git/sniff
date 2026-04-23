@@ -191,6 +191,16 @@
 
   let busy = false;
   let resetTimer = null;
+  let lastResult = null;
+  let streak = 0;
+
+  function pickResult() {
+    let isPass = Math.random() < 0.5;
+    if (streak >= 2) isPass = !lastResult;
+    if (isPass === lastResult) { streak++; } else { streak = 1; }
+    lastResult = isPass;
+    return isPass;
+  }
 
   function doSniff() {
     if (busy) return;
@@ -198,7 +208,7 @@
     sniffBtn.disabled = true;
     nextBtn.classList.remove('show');
 
-    const isPass = Math.random() < 0.5;
+    const isPass = pickResult();
     overlayVideo.src = isPass ? 'sniff pass.mp4' : 'sniff fail.mp4';
     overlay.classList.add('show');
     overlayVideo.currentTime = 0;
